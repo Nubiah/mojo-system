@@ -1,13 +1,15 @@
-/* Mojo System — Service Worker (offline-first, desktop Mac/Windows) */
+/* Mojo System — Service Worker (offline-first, compatible sous-dossier GitHub Pages) */
 
-const CACHE_NAME = 'mojo-system-v1'
+// Base calculée depuis le scope réel du SW (ex. '/mojo-system/')
+const BASE = new URL(self.registration.scope).pathname
+const INDEX = `${BASE}index.html`
+const CACHE_NAME = 'mojo-system-v2'
 const CORE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/icons/icon.svg'
-  // Note : les assets Vite hashés (/assets/...) sont mis en cache à la volée (runtime).
-  // Ajoute ici '/icons/icon-192.png' et '/icons/icon-512.png' une fois générés.
+  BASE,
+  INDEX,
+  `${BASE}manifest.webmanifest`,
+  `${BASE}icons/icon.svg`
+  // Note : les assets Vite hashés (assets/...) sont mis en cache à la volée (runtime).
 ]
 
 self.addEventListener('install', (event) => {
@@ -49,12 +51,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE_NAME).then((c) => c.put('/index.html', copy))
+          caches.open(CACHE_NAME).then((c) => c.put(INDEX, copy))
           return res
         })
         .catch(async () => {
           const cache = await caches.open(CACHE_NAME)
-          return (await cache.match('/index.html')) || Response.error()
+          return (await cache.match(INDEX)) || Response.error()
         })
     )
     return

@@ -46,3 +46,13 @@ Les collections sont strictement séparées entre les deux univers.
 ## Déploiement
 
 Le dossier `dist/` est statique et peut être servi tel quel (Netlify, Vercel, GitHub Pages, etc.).
+
+### GitHub Pages
+
+Le workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) construit et publie l'application à chaque push sur `main`.
+
+1. Dans le dépôt : **Settings → Pages → Build and deployment → Source : GitHub Actions**.
+2. Pousser sur `main` (ou lancer le workflow manuellement depuis l'onglet Actions).
+3. L'application est servie sur `https://nubiah.github.io/mojo-system/`.
+
+Le build reçoit automatiquement le bon chemin de base (`VITE_BASE_PATH`), le service worker et le manifest s'adaptant au sous-dossier.

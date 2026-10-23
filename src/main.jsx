@@ -12,8 +12,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // Enregistrement PWA — uniquement en prod (après `vite build`)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
+    const base = import.meta.env.BASE_URL
     navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+      .register(`${base}sw.js`, { scope: base })
       .catch((err) => console.warn('[PWA] SW register failed', err))
   })
 }
