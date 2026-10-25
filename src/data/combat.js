@@ -135,6 +135,8 @@ export function normalizeCombat(raw) {
           pvMax: Math.max(1, Number(p?.pvMax) || 1),
           pv: Math.max(0, Math.min(Number(p?.pv ?? p?.pvMax ?? 1), Math.max(1, Number(p?.pvMax) || 1))),
           mort: !!p?.mort,
+          degatsDernier: p?.degatsDernier || null,
+          degatsRound: Math.max(0, Number(p?.degatsRound) || 0),
           statuts: Array.isArray(p?.statuts)
             ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1) }))
             : [],
@@ -176,11 +178,11 @@ export function applyRoundEffects(participants = [], rng = Math.random) {
         else entries.push(`${p.nom} n’est plus ${s.nom.toLowerCase()}${s.nom.toLowerCase().endsWith('e') ? 'e' : ''}.`)
       }
     })
-    if (dot <= 0 && details.length === 0) return { ...p, statuts: kept }
+    if (dot <= 0 && details.length === 0) return { ...p, statuts: kept, degatsRound: 0 }
     const pv = Math.max(0, p.pv - dot)
     if (dot > 0) entries.push(`${p.nom} subit ${dot} dégâts (${details.join(', ')}) — ${pv}/${p.pvMax} PV.`)
     if (pv === 0 && !p.mort) entries.push(`${p.nom} est mort.`)
-    return { ...p, pv, statuts: kept, mort: pv === 0 ? true : p.mort }
+    return { ...p, pv, statuts: kept, mort: pv === 0 ? true : p.mort, degatsRound: dot }
   })
   return { participants: next, entries }
 }
@@ -249,6 +251,8 @@ export function normalizeIllireaCombat(raw) {
             pvMax,
             pv: Math.max(0, Math.min(Number(p?.pv ?? pvMax), pvMax)),
             mort: !!p?.mort,
+            degatsDernier: p?.degatsDernier || null,
+            degatsRound: Math.max(0, Number(p?.degatsRound) || 0),
             statuts: Array.isArray(p?.statuts)
               ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1) }))
               : [],

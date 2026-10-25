@@ -4,6 +4,7 @@ import {
   Download,
   Sparkles,
   Swords,
+  Undo2,
   Upload,
   WifiOff,
   RotateCcw
@@ -25,7 +26,7 @@ const storeKeyFor = (sectionId) => (sectionId === 'combat' ? 'combats' : 'bestia
 export default function App() {
   const [universeId, setUniverseId] = useState('illirea')
   const [sectionId, setSectionId] = useState('bestiaire')
-  const { store, setStore, exportJSON, importJSON, reset } = useMojoStore()
+  const { store, setStore, exportJSON, importJSON, reset, undo, canUndo } = useMojoStore()
   const fileRef = useRef(null)
 
   const universe = UNIVERSES.find((u) => u.id === universeId)
@@ -281,6 +282,14 @@ export default function App() {
           )}
 
           <div className="mt-6 flex gap-2">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Annuler la dernière action (dégâts, ajout, statut…)"
+              className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Undo2 size={14} /> Annuler
+            </button>
             <button
               onClick={() => { if (confirm('Tout effacer (local) ? Pense à exporter avant.')) reset() }}
               className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg text-slate-500 hover:text-red-300 hover:bg-red-500/10"

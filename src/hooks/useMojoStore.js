@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const STORAGE_KEY = 'mojo-system-v1'
 
@@ -62,7 +62,7 @@ export function useMojoStore() {
     if (!parsed.universes || !parsed.universes.illirea || !parsed.universes.teotl) {
       throw new Error('Fichier invalide : clés universes.illirea / universes.teotl manquantes.')
     }
-    setStore({
+    setStoreHistory({
       ...DEFAULT_STORE,
       ...parsed,
       universes: {
@@ -74,5 +74,24 @@ export function useMojoStore() {
 
   const reset = useCallback(() => setStore(DEFAULT_STORE), [])
 
-  return { store, setStore, exportJSON, importJSON, reset }
+  // ── Undo : chaque mutation passe par setStoreHistory, qui garde l'état précédent ──
+  const historyRef = useRef([])
+  const [canUndo, setCanUndo] = useState(false)
+
+  const setStoreHistory = useCallback((updater) => {
+    setStore((prev) => {
+      historyRef.current.push(prev)
+      if (historyRef.current.length > 30) historyRef.current.shift()
+      setCanUndo(true)
+      return typeof updater === 'function' ? updater(prev) : updater
+    })
+  }, [])
+
+  const undo = useCallback(() => {
+    const prev = historyRef.current.pop()
+    setCanUndo(historyRef.current.length > 0)
+    if (prev) setStore(prev)
+  }, [])
+
+  return { store, setStore: setStoreHistory, exportJSON, importJSON, reset, undo, canUndo }
 }
