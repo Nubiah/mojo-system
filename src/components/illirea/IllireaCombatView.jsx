@@ -13,6 +13,9 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
   const [addOpen, setAddOpen] = useState(false)
   const [addSel, setAddSel] = useState('')
   const [addQty, setAddQty] = useState('1')
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [quickNom, setQuickNom] = useState('')
+  const [quickPv, setQuickPv] = useState('10')
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: 999999 })
@@ -47,6 +50,30 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
     setAddOpen(false)
     setAddSel('')
     setAddQty('1')
+  }
+
+  const addQuickParticipant = () => {
+    const nom = quickNom.trim() || 'Obstacle'
+    const pvMax = Math.max(1, Math.floor(Number(quickPv) || 10))
+    const added = {
+      instanceId: newIllireaId(),
+      monsterId: null, // jamais sauvegardé dans le bestiaire
+      nom,
+      niveau: null,
+      pvMax,
+      pv: pvMax,
+      mort: false,
+      statuts: [],
+      defense: { bas: 3, moyen: 4, haut: 5 },
+      caracs: {},
+      capacites: [],
+      inventaire: [],
+      lootTables: []
+    }
+    onChange(pushLog({ ...combat, participants: [...combat.participants, added] }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
+    setQuickOpen(false)
+    setQuickNom('')
+    setQuickPv('10')
   }
 
   const setStatuses = (p, statuts, entries) => {
@@ -169,15 +196,53 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
               Annuler
             </button>
           </div>
+        ) : quickOpen ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs text-slate-400 mb-1.5">Nom (obstacle, élément… non sauvegardé au bestiaire)</label>
+              <input
+                className={`${inputCls} !py-1.5 !text-xs`}
+                placeholder="Porte barricadée"
+                value={quickNom}
+                onChange={(e) => setQuickNom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addQuickParticipant() }}
+              />
+            </div>
+            <div className="w-20">
+              <label className="block text-xs text-slate-400 mb-1.5">PV max</label>
+              <input
+                className={`${inputCls} !py-1.5 !text-xs`}
+                inputMode="numeric"
+                value={quickPv}
+                onChange={(e) => setQuickPv(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addQuickParticipant() }}
+              />
+            </div>
+            <button onClick={addQuickParticipant} className="text-xs px-3 py-1.5 rounded-lg bg-teal-300 text-slate-950 font-semibold hover:bg-teal-200">
+              Ajouter
+            </button>
+            <button onClick={() => setQuickOpen(false)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+              Annuler
+            </button>
+          </div>
         ) : (
-          <button
-            onClick={() => setAddOpen(true)}
-            disabled={monsters.length === 0}
-            title={monsters.length === 0 ? 'Le bestiaire Illirea est vide' : 'Ajouter un monstre au combat en cours'}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-          >
-            <Plus size={13} /> Ajouter un monstre
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setAddOpen(true)}
+              disabled={monsters.length === 0}
+              title={monsters.length === 0 ? 'Le bestiaire Illirea est vide' : 'Ajouter un monstre au combat en cours'}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+            >
+              <Plus size={13} /> Ajouter un monstre
+            </button>
+            <button
+              onClick={() => setQuickOpen(true)}
+              title="Ajouter un participant temporaire (nom + PV), sans passer par le bestiaire"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            >
+              <Plus size={13} /> Ajouter à la volée
+            </button>
+          </div>
         )}
       </div>
 
@@ -221,6 +286,9 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
   const [sNom, setSNom] = useState('Poison')
   const [sDegats, setSDegats] = useState('1d4')
   const [sDuree, setSDuree] = useState('3')
+  const [dmgVal, setDmgVal] = useState('')
+
+  const adHoc = !p.monsterId // participant à la volée (obstacle…) — aucune fiche bestiaire
 
   const caps = p.capacites || []
   const selCapId = capSel || caps[0]?.id || ''
@@ -263,13 +331,35 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
     setResult(null)
   }
 
+  const applyDamage = () => {
+    if (p.mort) return
+    const raw = dmgVal.trim()
+    if (!raw) return
+    const d = rollDiceExpression(raw)
+    if (!d) {
+      onLog([`Valeur « ${raw} » illisible pour ${p.nom} (ex : 3, 2d6, 1d8+2).`])
+      return
+    }
+    if (d.total === 0) return
+    const healing = d.total < 0
+    const dmg = healing ? -d.total : d.total
+    const pv = Math.max(0, Math.min(p.pvMax, p.pv - d.total))
+    const participants = combat.participants.map((x) => (x.instanceId === p.instanceId ? { ...x, pv, mort: pv === 0 } : x))
+    let next = { ...combat, participants }
+    const entries = [healing ? `${p.nom} récupère ${dmg} PV (${raw} → +${dmg}).` : `${p.nom} subit ${d.detail}.`]
+    if (pv === 0 && !p.mort) entries.push(`${p.nom} est mort.`)
+    next = pushLog(next, entries)
+    onChange(next)
+    setDmgVal('')
+  }
+
   const hpColor = () => {
     const r = p.pvMax ? p.pv / p.pvMax : 1
     return r > 0.5 ? 'bg-emerald-400' : r > 0.25 ? 'bg-amber-400' : 'bg-red-400'
   }
 
-  const launchAttack = () => {
-    const cap = caps.find((c) => (c.id || c.nom) === selCapId)
+  const launchAttack = (capArg) => {
+    const cap = capArg || caps.find((c) => (c.id || c.nom) === selCapId)
     if (!cap) return
     const pool = parseAttackPool(cap.attaque, p.caracs)
     if (pool.error) {
@@ -278,7 +368,7 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
     }
     const attack = rollAttackPool(pool.totalDice)
     onLog([`${p.nom} utilise ${cap.nom} : ${cap.attaque || '?'} → ${pool.totalDice}D6 [${attack.dice.slice(0, 60).join(' ')}${attack.dice.length > 60 ? ' …' : ''}] → ${attack.succes} succès.`])
-    setResult({ capNom: cap.nom, attaqueExpr: cap.attaque, pool, attack, degatsExpr: cap.degats, damage: null, damageError: null })
+    setResult({ capNom: cap.nom, attaqueExpr: cap.attaque, pool, attack, degatsExpr: cap.degats, damage: null, damageError: null, cap })
   }
 
   const launchDamage = () => setResult((r) => {
@@ -297,12 +387,18 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="font-bold text-[15px] leading-snug">{p.nom}</h4>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Niv. {p.niveau} • Déf <span className="text-slate-200 font-semibold">{defenseLabel(p)}</span>
-          </p>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            {ILLIREA_CARACS.map((k) => `${k} ${p.caracs?.[k] ?? '–'}`).join(' • ')}
-          </p>
+          {adHoc ? (
+            <p className="text-xs text-slate-400 mt-0.5"><span className="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">à la volée</span></p>
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Niv. {p.niveau} • Déf <span className="text-slate-200 font-semibold">{defenseLabel(p)}</span>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {ILLIREA_CARACS.map((k) => `${k} ${p.caracs?.[k] ?? '–'}`).join(' • ')}
+              </p>
+            </>
+          )}
         </div>
         <button
           onClick={() => onToggleMort(p)}
@@ -333,6 +429,24 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
               {d > 0 ? `+${d}` : d}
             </button>
           ))}
+        </div>
+        <div className="mt-1.5 flex gap-1.5">
+          <input
+            className={`${inputCls} !py-1 !text-xs flex-1`}
+            placeholder="Dégâts : 3, 2d6, 1d8+2…"
+            inputMode="text"
+            value={dmgVal}
+            onChange={(e) => setDmgVal(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') applyDamage() }}
+          />
+          <button
+            onClick={applyDamage}
+            disabled={p.mort || dmgVal.trim() === ''}
+            title="Infliger ces dégâts (une valeur négative soigne)"
+            className="text-xs px-2.5 py-1 rounded-lg bg-red-400 text-slate-950 font-semibold hover:bg-red-300 disabled:opacity-30"
+          >
+            Infliger
+          </button>
         </div>
       </div>
 
@@ -387,27 +501,37 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
       <div className="mt-1.5">
         <button
           onClick={() => setAtkOpen(!atkOpen)}
-          disabled={p.mort}
-          title="Lancer une attaque (capacité de la fiche)"
-          className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-30"
+          disabled={p.mort || adHoc}
+          title={adHoc ? 'Aucune capacité — participant ajouté à la volée' : 'Lancer une attaque (capacité de la fiche)'}
+          className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <Swords size={13} /> Attaquer
         </button>
 
-        {atkOpen && !p.mort && (
+        {atkOpen && !p.mort && !adHoc && (
           <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900 p-2.5 space-y-2">
             {caps.length === 0 ? (
               <p className="text-xs text-slate-400">
                 Aucune capacité sur cette fiche. Ajoute-les dans le bestiaire, puis recharge ci-dessous.
               </p>
             ) : (
-              <select className={`${inputCls} !py-1.5 !text-xs`} value={selCapId} onChange={(e) => { setCapSel(e.target.value); setResult(null) }}>
+              <div className="space-y-1">
                 {caps.map((c) => (
-                  <option key={c.id || c.nom} value={c.id || c.nom}>
-                    {c.nom}{c.attaque ? ` (${c.attaque}${c.degats ? ` → ${c.degats}` : ''})` : ''}
-                  </option>
+                  <div key={c.id || c.nom} className="relative group/cap">
+                    <button
+                      onClick={() => launchAttack(c)}
+                      className="w-full text-left text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 hover:border-violet-400/40"
+                    >
+                      ⚔ {c.nom}{c.attaque ? <span className="text-slate-400"> — {c.attaque}{c.degats ? ` → ${c.degats}` : ''}</span> : null}
+                    </button>
+                    {c.description ? (
+                      <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden group-hover/cap:block w-full rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-200 shadow-lg shadow-black/50">
+                        {c.description}
+                      </span>
+                    ) : null}
+                  </div>
                 ))}
-              </select>
+              </div>
             )}
             {fresh ? (
               <button onClick={reload} className="text-[11px] text-slate-500 hover:text-slate-200 underline underline-offset-2 text-left">
@@ -442,7 +566,7 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onToggleMort, onLog, 
                           Lancer les dégâts{result.damage ? ' (relancer)' : ''}
                         </button>
                       )}
-                      <button onClick={launchAttack} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+                      <button onClick={() => launchAttack(result.cap)} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
                         Relancer
                       </button>
                       <button onClick={() => setResult(null)} className="text-[11px] px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-200">

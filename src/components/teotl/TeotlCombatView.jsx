@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, Dices, Flag, Play, Plus, Skull, SkipForward, Trash2, X } from 'lucide-react'
 import { applyRoundEffects, createParticipantFromEnemy, participantToLootSource, STATUT_PRESETS } from '../../data/combat.js'
-import { rollExploding } from '../../data/dice.js'
+import { rollDiceExpression, rollExploding } from '../../data/dice.js'
 import { rollLootForEnemies } from '../../data/loot.js'
 import { newId } from '../../data/teotl.js'
 import LootResult from './LootResult.jsx'
@@ -19,6 +19,10 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
   const [addOpen, setAddOpen] = useState(false)
   const [addSel, setAddSel] = useState('')
   const [addQty, setAddQty] = useState('1')
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [quickNom, setQuickNom] = useState('')
+  const [quickPv, setQuickPv] = useState('10')
+  const [dmgVals, setDmgVals] = useState({}) // instanceId -> champ dégâts
   const logRef = useRef(null)
 
   useEffect(() => {
@@ -116,6 +120,49 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
     setAddOpen(false)
     setAddSel('')
     setAddQty('1')
+  }
+
+  // ── Ajout d'un participant à la volée (nom + PV, jamais sauvé au bestiaire) ──
+  const addQuickParticipant = () => {
+    const nom = quickNom.trim() || 'Obstacle'
+    const pvMax = Math.max(1, Math.floor(Number(quickPv) || 10))
+    const added = {
+      instanceId: newId(),
+      enemyId: null, // jamais sauvegardé dans le bestiaire
+      nom,
+      niveau: 1,
+      pvMax,
+      pv: pvMax,
+      mort: false,
+      statuts: [],
+      snapshot: { armure: '', competences: [], actionsBonus: [], lootTables: [], lootIndividuel: [] }
+    }
+    onChange(pushLog({ ...combat, participants: [...combat.participants, added] }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
+    setQuickOpen(false)
+    setQuickNom('')
+    setQuickPv('10')
+  }
+
+  // ── Dégâts personnalisés (valeur fixe ou expression de dés ; négatif = soin) ──
+  const applyDamage = (p) => {
+    if (p.mort) return
+    const raw = (dmgVals[p.instanceId] || '').trim()
+    if (!raw) return
+    const d = rollDiceExpression(raw)
+    if (!d) {
+      onChange(pushLog(combat, [`Valeur « ${raw} » illisible pour ${p.nom} (ex : 3, 2d6, 1d8+2).`]))
+      return
+    }
+    if (d.total === 0) return
+    const healing = d.total < 0
+    const pv = Math.max(0, Math.min(p.pvMax, p.pv - d.total))
+    const participants = combat.participants.map((x) => (x.instanceId === p.instanceId ? { ...x, pv, mort: pv === 0 } : x))
+    let next = { ...combat, participants }
+    const entries = [healing ? `${p.nom} récupère ${-d.total} PV (${raw} → +${-d.total}).` : `${p.nom} subit ${d.detail}.`]
+    if (pv === 0 && !p.mort) entries.push(`${p.nom} est détruit.`)
+    next = pushLog(next, entries)
+    onChange(next)
+    setDmgVals((prev) => ({ ...prev, [p.instanceId]: '' }))
   }
 
   // ── Butin des morts ──
@@ -216,15 +263,53 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
               Annuler
             </button>
           </div>
+        ) : quickOpen ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs text-slate-400 mb-1.5">Nom (obstacle, élément… non sauvegardé au bestiaire)</label>
+              <input
+                className={`${inputCls} !py-1.5 !text-xs`}
+                placeholder="Porte barricadée"
+                value={quickNom}
+                onChange={(e) => setQuickNom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addQuickParticipant() }}
+              />
+            </div>
+            <div className="w-20">
+              <label className="block text-xs text-slate-400 mb-1.5">PV max</label>
+              <input
+                className={`${inputCls} !py-1.5 !text-xs`}
+                inputMode="numeric"
+                value={quickPv}
+                onChange={(e) => setQuickPv(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addQuickParticipant() }}
+              />
+            </div>
+            <button onClick={addQuickParticipant} className="text-xs px-3 py-1.5 rounded-lg bg-teal-300 text-slate-950 font-semibold hover:bg-teal-200">
+              Ajouter
+            </button>
+            <button onClick={() => setQuickOpen(false)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+              Annuler
+            </button>
+          </div>
         ) : (
-          <button
-            onClick={() => setAddOpen(true)}
-            disabled={enemies.length === 0}
-            title={enemies.length === 0 ? 'Le bestiaire Teotl est vide' : 'Ajouter un monstre au combat en cours'}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-          >
-            <Plus size={13} /> Ajouter un monstre
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setAddOpen(true)}
+              disabled={enemies.length === 0}
+              title={enemies.length === 0 ? 'Le bestiaire Teotl est vide' : 'Ajouter un monstre au combat en cours'}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+            >
+              <Plus size={13} /> Ajouter un monstre
+            </button>
+            <button
+              onClick={() => setQuickOpen(true)}
+              title="Ajouter un participant temporaire (nom + PV), sans passer par le bestiaire"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            >
+              <Plus size={13} /> Ajouter à la volée
+            </button>
+          </div>
         )}
       </div>
 
@@ -242,7 +327,13 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
                     </span>
                   )}
                 </h4>
-                <p className="text-xs text-slate-400 mt-0.5">Niv. {p.niveau}{p.snapshot?.armure ? ` • ${p.snapshot.armure}` : ''}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {!p.enemyId ? (
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">à la volée</span>
+                  ) : (
+                    <>Niv. {p.niveau}{p.snapshot?.armure ? ` • ${p.snapshot.armure}` : ''}</>
+                  )}
+                </p>
               </div>
               <button
                 onClick={() => toggleMort(p)}
@@ -273,6 +364,24 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
                     {d > 0 ? `+${d}` : d}
                   </button>
                 ))}
+              </div>
+              <div className="mt-1.5 flex gap-1.5">
+                <input
+                  className={`${inputCls} !py-1 !text-xs flex-1`}
+                  placeholder="Dégâts : 3, 2d6, 1d8+2…"
+                  inputMode="text"
+                  value={dmgVals[p.instanceId] || ''}
+                  onChange={(e) => setDmgVals((prev) => ({ ...prev, [p.instanceId]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') applyDamage(p) }}
+                />
+                <button
+                  onClick={() => applyDamage(p)}
+                  disabled={p.mort || !(dmgVals[p.instanceId] || '').trim()}
+                  title="Infliger ces dégâts (une valeur négative soigne)"
+                  className="text-xs px-2.5 py-1 rounded-lg bg-red-400 text-slate-950 font-semibold hover:bg-red-300 disabled:opacity-30"
+                >
+                  Infliger
+                </button>
               </div>
             </div>
 
@@ -327,24 +436,36 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
             {((p.snapshot?.competences || []).length > 0 || (p.snapshot?.actionsBonus || []).length > 0) && (
               <div className="mt-1.5 space-y-1">
                 {(p.snapshot.competences || []).map((c) => (
-                  <button
-                    key={c.id || c.nom}
-                    onClick={() => useAbility(p, c)}
-                    disabled={p.mort}
-                    className="w-full text-left text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 hover:border-violet-400/40 disabled:opacity-30"
-                  >
-                    ⚔ {c.nom}{c.deAttaque ? <span className="text-slate-400"> — {c.deAttaque}</span> : null}
-                  </button>
+                  <div key={c.id || c.nom} className="relative group/cap">
+                    <button
+                      onClick={() => useAbility(p, c)}
+                      disabled={p.mort}
+                      className="w-full text-left text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 hover:border-violet-400/40 disabled:opacity-30"
+                    >
+                      ⚔ {c.nom}{c.deAttaque ? <span className="text-slate-400"> — {c.deAttaque}</span> : null}
+                    </button>
+                    {c.note ? (
+                      <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden group-hover/cap:block w-full rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-200 shadow-lg shadow-black/50">
+                        {c.note}
+                      </span>
+                    ) : null}
+                  </div>
                 ))}
                 {(p.snapshot.actionsBonus || []).map((a) => (
-                  <button
-                    key={a.id || a.nom}
-                    onClick={() => useAbility(p, a)}
-                    disabled={p.mort}
-                    className="w-full text-left text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-dashed border-slate-700 text-slate-300 hover:border-violet-400/40 disabled:opacity-30"
-                  >
-                    ✦ {a.nom}{a.deAttaque ? <span className="text-slate-400"> — {a.deAttaque}</span> : null} <span className="text-slate-500">(bonus)</span>
-                  </button>
+                  <div key={a.id || a.nom} className="relative group/cap">
+                    <button
+                      onClick={() => useAbility(p, a)}
+                      disabled={p.mort}
+                      className="w-full text-left text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-dashed border-slate-700 text-slate-300 hover:border-violet-400/40 disabled:opacity-30"
+                    >
+                      ✦ {a.nom}{a.deAttaque ? <span className="text-slate-400"> — {a.deAttaque}</span> : null} <span className="text-slate-500">(bonus)</span>
+                    </button>
+                    {a.note ? (
+                      <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden group-hover/cap:block w-full rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-200 shadow-lg shadow-black/50">
+                        {a.note}
+                      </span>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             )}
