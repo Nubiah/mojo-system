@@ -9,7 +9,11 @@ Compagnon de jeu de rôle (PWA hors-ligne) pour deux univers maison : **Illirea*
 - **Rencontres prédéfinies** : composition d'embuscades réutilisables, niveau = somme des niveaux.
 - **Suivi de combat** : rounds, PV, dégâts sur la durée (poison, saignement, statuts personnalisés), butin des morts.
 - **Création de combat à la main** : ajout de monstres du bestiaire sans passer par une rencontre, possible aussi en cours de combat.
-- **Jets de dés** : pools Illirea (succès sur 4/5/6) et dés explosifs Teotl.
+- **Participants à la volée** : obstacle ou PNJ éphémère (nom + PV max) dans le combat, sans toucher au bestiaire.
+- **Dégâts personnalisés** : champ libre sur chaque participant (valeur fixe, `2d6`, `1d8+2`… ; négatif = soin), avec historique (dernier jet + cumul du round).
+- **Undo** : bouton « Annuler » qui remonte les 30 dernières actions (dégâts, ajouts, statuts, import…).
+- **Tooltips de capacités** : description au survol des capacités en combat (Illirea) et notes des compétences / actions bonus (Teotl).
+- **Jets de dés** : pools Illirea (succès sur 4/5/6) et dés explosifs Teotl (1 = échec, dé max = relance chaînée).
 - **Sauvegarde locale** + export / import d'un fichier JSON unique.
 - **Installable et hors-ligne** (manifest + service worker).
 
@@ -41,7 +45,7 @@ Tout est stocké dans le navigateur (`localStorage`, clé `mojo-system-v1`) et p
 }
 ```
 
-Les collections sont strictement séparées entre les deux univers.
+Les collections sont strictement séparées entre les deux univers. Les participants « à la volée » vivent uniquement dans les combats (`monsterId`/`enemyId` à `null`).
 
 ## Déploiement
 
@@ -56,3 +60,7 @@ Le workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) const
 3. L'application est servie sur `https://nubiah.github.io/mojo-system/`.
 
 Le build reçoit automatiquement le bon chemin de base (`VITE_BASE_PATH`), le service worker et le manifest s'adaptant au sous-dossier.
+
+## Contribuer (humains & agents IA)
+
+Les agents LLM doivent lire [AGENTS.md](AGENTS.md) avant toute modification : architecture, règles du modèle de données à ne pas casser, conventions et workflow de vérification.
