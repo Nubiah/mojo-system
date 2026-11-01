@@ -7,12 +7,14 @@ Compagnon de jeu de rôle (PWA hors-ligne) pour deux univers maison : **Illirea*
 - **Bestiaires séparés par univers** : fiches complètes, tags Elite / Légendaire, recherche et tri par niveau.
 - **Tables de butin** : probabilités, quantités en dés, simulation et tirage de butin.
 - **Rencontres prédéfinies** : composition d'embuscades réutilisables, niveau = somme des niveaux.
-- **Suivi de combat** : rounds, PV, dégâts sur la durée (poison, saignement, statuts personnalisés), butin des morts.
+- **Suivi de combat** : rounds, PV, dégâts sur la durée (poison, saignement, statuts personnalisés), butin des morts. Les participants morts passent automatiquement en bas de la liste ; les doublons sont numérotés (« Gobelin #1 », « Gobelin #2 »…).
+- **Bibliothèque de statuts (DoT)** : préréglages de dégâts sur la durée par univers, réutilisables dans tous les combats, avec création à la volée en plein combat. Chaque statut peut être **critique** (dés explosifs, règle Teotl : un DoT n'échoue jamais, le max du dé relance) et/ou **cumulable** (instances indépendantes sur la même cible).
 - **Création de combat à la main** : ajout de monstres du bestiaire sans passer par une rencontre, possible aussi en cours de combat.
 - **Participants à la volée** : obstacle ou PNJ éphémère (nom + PV max) dans le combat, sans toucher au bestiaire.
 - **Dégâts personnalisés** : champ libre sur chaque participant (valeur fixe, `2d6`, `1d8+2`… ; négatif = soin), avec historique (dernier jet + cumul du round).
 - **Undo** : bouton « Annuler » qui remonte les 30 dernières actions (dégâts, ajouts, statuts, import…).
 - **Tooltips de capacités** : description au survol des capacités en combat (Illirea) et notes des compétences / actions bonus (Teotl).
+- **UI combat pensée petit écran** : grille Teotl jusqu'à 4 fiches par ligne, dernier jet de dés affiché en toast fixe en bas de l'écran.
 - **Jets de dés** : pools Illirea (succès sur 4/5/6) et dés explosifs Teotl (1 = échec, dé max = relance chaînée).
 - **Sauvegarde locale** + export / import d'un fichier JSON unique.
 - **Installable et hors-ligne** (manifest + service worker).
@@ -39,8 +41,8 @@ Tout est stocké dans le navigateur (`localStorage`, clé `mojo-system-v1`) et p
 {
   "version": 3,
   "universes": {
-    "illirea": { "bestiaire": [], "combats": [], "lootTables": [], "rencontres": [] },
-    "teotl": { "bestiaire": [], "combats": [], "lootTables": [], "rencontres": [] }
+    "illirea": { "bestiaire": [], "combats": [], "lootTables": [], "rencontres": [], "dotPresets": [] },
+    "teotl": { "bestiaire": [], "combats": [], "lootTables": [], "rencontres": [], "dotPresets": [] }
   }
 }
 ```

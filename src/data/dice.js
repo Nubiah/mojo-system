@@ -33,7 +33,7 @@ export function rollDiceExpression(raw, rng = Math.random) {
 // - 1 au PREMIER dé du pool -> attaque ÉCHOUÉE (failed: true)
 // - tout dé au maximum de ses faces -> relance chaînée d’un dé identique (extra)
 // -> { total, dice, extra, failed, exploded, detail } ou null si illisible
-export function rollExploding(raw, rng = Math.random) {
+export function rollExploding(raw, rng = Math.random, { noFail = false } = {}) {
   const parsed = parseDiceExpression(raw)
   if (!parsed) return null
   if (parsed.dice.length === 0) {
@@ -45,7 +45,7 @@ export function rollExploding(raw, rng = Math.random) {
   const { n, faces } = parsed.dice[0]
   const dice = []
   for (let i = 0; i < n; i++) dice.push(1 + Math.floor(rng() * faces))
-  const failed = dice.length > 0 && dice[0] === 1
+  const failed = !noFail && dice.length > 0 && dice[0] === 1
   const extra = []
   let guard = 0
   const explode = (v) => {
@@ -63,6 +63,6 @@ export function rollExploding(raw, rng = Math.random) {
   if (parsed.flat) bits.push(parsed.flat > 0 ? `+${parsed.flat}` : `${parsed.flat}`)
   let detail = `${String(raw).trim()} → ${bits.join(' ')} = ${total}`
   if (failed) detail += ' — ÉCHEC (1 au premier dé)'
-  else if (exploded) detail += ' — CRITIQUE EXPLOSIF'
+  else if (exploded) detail += ` — CRITIQUE EXPLOSIF${noFail ? ' (DoT)' : ''}`
   return { total, dice, extra, failed, exploded, flat: parsed.flat, detail }
 }

@@ -8,8 +8,8 @@ const DEFAULT_STORE = {
   version: 3,
   exportedAt: null,
   universes: {
-    illirea: { bestiaire: [], combats: [], lootTables: [], rencontres: [] },
-    teotl: { bestiaire: [], combats: [], lootTables: [], rencontres: [] }
+    illirea: { bestiaire: [], combats: [], lootTables: [], rencontres: [], dotPresets: [] },
+    teotl: { bestiaire: [], combats: [], lootTables: [], rencontres: [], dotPresets: [] }
   }
 }
 

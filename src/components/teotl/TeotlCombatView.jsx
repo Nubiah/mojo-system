@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, Dices, Flag, Play, Plus, Skull, SkipForward, Trash2, X } from 'lucide-react'
-import { applyRoundEffects, createParticipantFromEnemy, participantToLootSource } from '../../data/combat.js'
+import { applyRoundEffects, createParticipantFromEnemy, participantToLootSource, renumberDuplicates } from '../../data/combat.js'
 import { rollDiceExpression, rollExploding } from '../../data/dice.js'
 import { rollLootForEnemies } from '../../data/loot.js'
 import { newId } from '../../data/teotl.js'
@@ -11,9 +11,9 @@ import QuickAddForm from '../shared/QuickAddForm.jsx'
 import StatusForm from '../shared/StatusForm.jsx'
 import { inputCls } from '../shared/inputCls.js'
 
-export default function TeotlCombatView({ combat, enemiesById = {}, tablesById = {}, onChange, onBack, onDelete }) {
+export default function TeotlCombatView({ combat, enemiesById = {}, tablesById = {}, dotPresets = [], onCreateDotPreset, onDeleteDotPreset, onChange, onBack, onDelete }) {
   const [statusFor, setStatusFor] = useState(null) // instanceId | null
-  const [lastRoll, setLastRoll] = useState('')
+  const [lastRoll, setLastRoll] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addSel, setAddSel] = useState('')
   const [addQty, setAddQty] = useState('1')
@@ -32,7 +32,7 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
 
   // ── Round suivant : DoT + durées ──
   const nextRound = () => {
-    const { participants, entries } = applyRoundEffects(combat.participants)
+    const { participants, entries } = applyRoundEffects(combat.participants, Math.random, 'teotl')
     let next = { ...combat, participants, round: combat.round + 1 }
     next = pushLog(next, entries)
     next.log.push({ id: newId(), round: next.round, texte: `Début du round ${next.round}.`, at: now() })
@@ -62,11 +62,22 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
   }
 
   // ── Statuts ──
-  const addStatus = (p, { nom, degats, duree }) => {
+  const addStatus = (p, { nom, degats, duree, critique, cumulable, savePreset }) => {
+    const existing = (p.statuts || []).find((s) => s.nom.toLowerCase() === nom.toLowerCase())
+    if (existing && !cumulable) {
+      onChange(pushLog(combat, [`${p.nom} est déjà ${nom.toLowerCase()} — statut non cumulable, effet inchangé.`]))
+      setStatusFor(null)
+      return
+    }
+    if (savePreset && onCreateDotPreset) onCreateDotPreset(savePreset)
     const participants = combat.participants.map((x) =>
-      x.instanceId === p.instanceId ? { ...x, statuts: [...x.statuts, { id: newId(), nom, degats, duree }] } : x
+      x.instanceId === p.instanceId ? { ...x, statuts: [...x.statuts, { id: newId(), nom, degats, duree, critique, cumulable }] } : x
     )
-    onChange(pushLog({ ...combat, participants }, [`${p.nom} est ${nom.toLowerCase()}${nom.toLowerCase().endsWith('e') ? 'e' : ''} (${degats}/tour${duree ? `, ${duree} tour${duree > 1 ? 's' : ''}` : ', jusqu’à la fin'}).`]))
+    const stack = existing ? ` (cumul ×${p.statuts.filter((s) => s.nom.toLowerCase() === nom.toLowerCase()).length + 1})` : ''
+    onChange(pushLog({ ...combat, participants }, [
+      `${p.nom} est ${nom.toLowerCase()}${nom.toLowerCase().endsWith('e') ? 'e' : ''} (${degats}/tour${duree ? `, ${duree} tour${duree > 1 ? 's' : ''}` : ', jusqu’à la fin'}${critique ? ', dé explosif' : ''})${stack}.`,
+      ...(savePreset ? [`Statut « ${nom} » enregistré en bibliothèque.`] : [])
+    ]))
     setStatusFor(null)
   }
 
@@ -96,7 +107,8 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
     const n = Math.max(1, Math.min(99, Math.floor(Number(addQty) || 1)))
     if (!src) return
     const added = Array.from({ length: n }, () => createParticipantFromEnemy(src))
-    onChange(pushLog({ ...combat, participants: [...combat.participants, ...added] }, [`${n}× ${src.nom} rejoint${n > 1 ? 'ent' : ''} le combat.`]))
+    const participants = renumberDuplicates([...combat.participants, ...added])
+    onChange(pushLog({ ...combat, participants }, [`${n}× ${src.nom} rejoint${n > 1 ? 'ent' : ''} le combat.`]))
     setAddOpen(false)
     setAddSel('')
     setAddQty('1')
@@ -115,7 +127,8 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
       statuts: [],
       snapshot: { armure: '', competences: [], actionsBonus: [], lootTables: [], lootIndividuel: [] }
     }
-    onChange(pushLog({ ...combat, participants: [...combat.participants, added] }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
+    const participants = renumberDuplicates([...combat.participants, added])
+    onChange(pushLog({ ...combat, participants }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
     setQuickOpen(false)
   }
 
@@ -202,7 +215,12 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
       </div>
 
       {lastRoll && (
-        <p className="mb-3 text-xs px-3 py-2 rounded-lg bg-violet-500/10 border border-violet-400/25 text-violet-100">🎲 {lastRoll}</p>
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] flex items-start gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-violet-400/40 shadow-lg shadow-black/50">
+          <span className="text-violet-100 text-xs leading-snug">🎲 {lastRoll}</span>
+          <button onClick={() => setLastRoll(null)} className="text-slate-500 hover:text-slate-200 shrink-0" title="Fermer">
+            <X size={14} />
+          </button>
+        </div>
       )}
 
       {combat.lootResult && (
@@ -271,9 +289,9 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
       </div>
 
       {/* Participants */}
-      <div className="grid items-start md:grid-cols-2 2xl:grid-cols-3 gap-2.5">
-        {combat.participants.map((p) => (
-          <article key={p.instanceId} className={`rounded-xl border p-3 ${p.mort ? 'border-slate-800 bg-slate-950 opacity-70' : 'border-slate-800 bg-slate-950'}`}>
+      <div className="grid items-start md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
+        {[...alive, ...dead].map((p) => (
+          <article key={p.instanceId} className={`rounded-xl border p-2 ${p.mort ? 'border-slate-800 bg-slate-950 opacity-70' : 'border-slate-800 bg-slate-950'}`}>
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h4 className="font-bold text-[15px] leading-snug inline-flex items-center gap-2">
@@ -316,7 +334,7 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
                 <div className="flex flex-wrap gap-1.5 mb-1.5">
                   {p.statuts.map((s) => (
                     <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-400/30 text-purple-200">
-                      {s.nom} {s.degats}/t{s.duree === null ? ' ∞' : ` (${s.duree}t)`}
+                      {s.nom} {s.degats}/t{s.duree === null ? ' ∞' : ` (${s.duree}t)`}{s.critique ? ' 💥' : ''}{s.cumulable ? ' ＋' : ''}
                       <button onClick={() => removeStatus(p, s)} className="hover:text-white"><X size={11} /></button>
                     </span>
                   ))}
@@ -324,6 +342,8 @@ export default function TeotlCombatView({ combat, enemiesById = {}, tablesById =
               )}
               {statusFor === p.instanceId ? (
                 <StatusForm
+                  libraryPresets={dotPresets}
+                  onSavePreset={onCreateDotPreset}
                   onCancel={() => setStatusFor(null)}
                   onAdd={(s) => addStatus(p, s)}
                 />

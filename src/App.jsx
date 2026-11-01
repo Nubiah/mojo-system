@@ -19,7 +19,7 @@ import IllireaCombatSection from './components/illirea/IllireaCombatSection.jsx'
 import { normalizeTeotlEnemy } from './data/teotl.js'
 import { normalizeIllireaMonster } from './data/illirea.js'
 import { normalizeLootTable } from './data/loot.js'
-import { normalizeCombat, normalizeEncounter, normalizeIllireaCombat } from './data/combat.js'
+import { normalizeCombat, normalizeEncounter, normalizeIllireaCombat, normalizeDotPreset } from './data/combat.js'
 
 const storeKeyFor = (sectionId) => (sectionId === 'combat' ? 'combats' : 'bestiaire')
 
@@ -231,6 +231,9 @@ export default function App() {
               encounters={(store.universes?.teotl?.rencontres || []).map(normalizeEncounter)}
               combats={(store.universes?.teotl?.combats || []).map(normalizeCombat)}
               tablesById={teotlTablesById}
+              dotPresets={(store.universes?.teotl?.dotPresets || []).map(normalizeDotPreset)}
+              onCreateDotPreset={(preset) => patchTeotl({ dotPresets: [...(store.universes.teotl.dotPresets || []), normalizeDotPreset(preset)] })}
+              onDeleteDotPreset={(id) => patchTeotl({ dotPresets: (store.universes.teotl.dotPresets || []).filter((x) => x.id !== id) })}
               onCreateEncounter={(r) => patchTeotl({ rencontres: [...(store.universes.teotl.rencontres || []), normalizeEncounter(r)] })}
               onUpdateEncounter={(r) => patchTeotl({ rencontres: (store.universes.teotl.rencontres || []).map((x) => (x.id === r.id ? normalizeEncounter(r) : x)) })}
               onDeleteEncounter={(id) => patchTeotl({ rencontres: (store.universes.teotl.rencontres || []).filter((x) => x.id !== id) })}
@@ -259,6 +262,9 @@ export default function App() {
             <IllireaCombatSection
               monsters={illireaMonsters}
               tablesById={illireaTablesById}
+              dotPresets={(store.universes?.illirea?.dotPresets || []).map(normalizeDotPreset)}
+              onCreateDotPreset={(preset) => patchIllirea({ dotPresets: [...(store.universes.illirea.dotPresets || []), normalizeDotPreset(preset)] })}
+              onDeleteDotPreset={(id) => patchIllirea({ dotPresets: (store.universes.illirea.dotPresets || []).filter((x) => x.id !== id) })}
               encounters={(store.universes?.illirea?.rencontres || []).map(normalizeEncounter)}
               combats={(store.universes?.illirea?.combats || []).map(normalizeIllireaCombat)}
               onCreateEncounter={(r) => patchIllirea({ rencontres: [...(store.universes.illirea.rencontres || []), normalizeEncounter(r)] })}

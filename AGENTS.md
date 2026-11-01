@@ -30,7 +30,7 @@ src/
     teotl.js       #   fiche ennemi Teotl (armure, taille, passifs, compétences, actions bonus, tags Elite/Légendaire)
     dice.js        #   parser d'expressions de dés (2d6+1), jets Illirea (succès sur 4/5/6), dés explosifs Teotl (rollExploding)
     loot.js        #   tables de butin (chance %, quantité en dés) + tirage
-    combat.js      #   rencontres, suivi de combat, DoT (applyRoundEffects), normalize* de tout
+    combat.js      #   rencontres, suivi de combat, DoT (applyRoundEffects), numérotation des doublons (renumberDuplicates), bibliothèque de statuts (createDotPreset/normalizeDotPreset), normalize* de tout
   hooks/
     useMojoStore.js  # store localStorage + export/import + undo global (undo/canUndo)
   components/
@@ -46,12 +46,17 @@ src/
 2. **Les `normalize*` de `src/data/` sont défensifs** (import de vieux JSON, champs partiels). Toute nouvelle donnée de participant/fiche doit passer par la création par défaut + le normalize correspondant, sinon l'import JSON la perd silencieusement.
 3. Historique de dégâts par participant : `degatsDernier` (string affichable, ex `2d6 → 7`) et `degatsRound` (cumul du round, remis à zéro par `applyRoundEffects`). Les deux sont normalisés dans `normalizeCombat` / `normalizeIllireaCombat`.
 4. Undo : `useMojoStore` remplace `setStore` par une version historisée (30 états). Toute mutation du store doit passer par ce `setStore` pour rester annulable — n'appelle jamais `localStorage.setItem` directement pour des données du store.
+5. **Bibliothèque de statuts** : `universes.<u>.dotPresets` (champs `{ id, nom, degats, duree, critique, cumulable }`), merge défensif existant suffit. Un statut appliqué en combat embarque `critique`/`cumulable` (normalisés à `false` si absents).
+6. **Numérotation des doublons** : `renumberDuplicates` est appelé dans `makeCombat` et à chaque ajout en combat ; la numérotation est persistée dans `participant.nom` (pas recalculée au rendu) pour garder logs et statuts cohérents.
 
 ## Conventions établies
 
 - **Deux univers, symétrie obligatoire** : toute feature combat/bestiaire s'implémente dans les deux, en respectant les différences (`monsterId`/`enemyId`, `snapshot` Teotl vs champs directs Illirea, « est mort » vs « est détruit » pour un obstacle).
 - **Composants partagés** (`src/components/shared/`) : les utiliser, ne pas dupliquer. Un bloc identique dans les deux univers doit y vivre.
 - **Dés** : tout champ de valeur passe par `rollDiceExpression` (accepte `3`, `2d6`, `1d8+2` ; valeur négative = soin). Teotl utilise `rollExploding` pour les attaques.
+- **DoT critique, cloisonné à Teotl** : `applyRoundEffects(participants, rng, dotMode)` — `dotMode='teotl'` lance les DoT critiques via `rollExploding(…, { noFail: true })` (un DoT n'échoue JAMAIS : 1 = 1, max du dé = explosion) ; `dotMode='plain'` (Illirea) = jet simple, les dégâts valent le dé. La case « Peut critiquer » est masquée côté Illirea (`StatusForm` prop `showCrit={false}`).
+- **Statut non cumulable** : si le même statut existe déjà sur la cible et que `cumulable` est faux, l'ajout est refusé avec entrée de journal (jamais silencieux).
+- **UI combat** : les deux vues rendent `[...alive, ...dead]` (morts toujours en bas) ; dernier jet Teotl = toast `fixed bottom-4` fermable ; grille Teotl `md:2 / lg:3 / 2xl:4`.
 - **Journal** : tout événement de combat passe par `pushLog` (jamais de mutation silencieuse).
 - **Tooltips de capacités** : CSS pur via `group-hover/cap`, pas de `title=` natif.
 - Vocabulaire UI français soigné (accents, typographie `’`).

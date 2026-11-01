@@ -11,6 +11,8 @@ export default function IllireaCombatSection({
   encounters = [],
   combats = [],
   tablesById = {},
+  dotPresets = [],
+  onCreateDotPreset, onDeleteDotPreset,
   onCreateEncounter, onUpdateEncounter, onDeleteEncounter, onDuplicateEncounter,
   onCreateCombat, onUpdateCombat, onDeleteCombat
 }) {
@@ -46,6 +48,9 @@ export default function IllireaCombatSection({
         combat={openCombat}
         monstersById={monstersById}
         tablesById={tablesById}
+        dotPresets={dotPresets}
+        onCreateDotPreset={onCreateDotPreset}
+        onDeleteDotPreset={onDeleteDotPreset}
         onChange={onUpdateCombat}
         onBack={() => setOpenCombatId(null)}
         onDelete={(id) => { onDeleteCombat(id); setOpenCombatId(null) }}

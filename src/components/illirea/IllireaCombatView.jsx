@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, Dices, Flag, Play, Plus, Skull, SkipForward, Swords, Trash2, X } from 'lucide-react'
-import { applyRoundEffects, createIllireaParticipantFromMonster, illireaLootForDead } from '../../data/combat.js'
+import { applyRoundEffects, createIllireaParticipantFromMonster, illireaLootForDead, renumberDuplicates } from '../../data/combat.js'
 import { defenseLabel, ILLIREA_CARACS, newIllireaId, normalizeIllireaMonster, parseAttackPool, rollAttackPool } from '../../data/illirea.js'
 import { rollDiceExpression } from '../../data/dice.js'
 import LootResult from '../teotl/LootResult.jsx'
@@ -10,7 +10,7 @@ import QuickAddForm from '../shared/QuickAddForm.jsx'
 import StatusForm from '../shared/StatusForm.jsx'
 import { inputCls } from '../shared/inputCls.js'
 
-export default function IllireaCombatView({ combat, monstersById = {}, tablesById = {}, onChange, onBack, onDelete }) {
+export default function IllireaCombatView({ combat, monstersById = {}, tablesById = {}, dotPresets = [], onCreateDotPreset, onDeleteDotPreset, onChange, onBack, onDelete }) {
   const [addOpen, setAddOpen] = useState(false)
   const [addSel, setAddSel] = useState('')
   const [addQty, setAddQty] = useState('1')
@@ -41,7 +41,8 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
     const n = Math.max(1, Math.min(99, Math.floor(Number(addQty) || 1)))
     if (!src) return
     const added = Array.from({ length: n }, () => createIllireaParticipantFromMonster(src))
-    onChange(pushLog({ ...combat, participants: [...combat.participants, ...added] }, [`${n}× ${src.nom} rejoint${n > 1 ? 'ent' : ''} le combat.`]))
+    const participants = renumberDuplicates([...combat.participants, ...added])
+    onChange(pushLog({ ...combat, participants }, [`${n}× ${src.nom} rejoint${n > 1 ? 'ent' : ''} le combat.`]))
     setAddOpen(false)
     setAddSel('')
     setAddQty('1')
@@ -242,7 +243,8 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
                 inventaire: [],
                 lootTables: []
               }
-              onChange(pushLog({ ...combat, participants: [...combat.participants, added] }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
+              const participants = renumberDuplicates([...combat.participants, added])
+              onChange(pushLog({ ...combat, participants }, [`${nom} (${pvMax} PV) rejoint le combat.`]))
               setQuickOpen(false)
             }}
             onCancel={() => setQuickOpen(false)}
@@ -269,11 +271,13 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
       </div>
 
       <div className="grid items-start sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-        {combat.participants.map((p) => (
+        {[...alive, ...dead].map((p) => (
           <ParticipantCard
             key={p.instanceId}
             p={p}
             monstersById={monstersById}
+            dotPresets={dotPresets}
+            onSavePreset={onCreateDotPreset}
             onBumpHp={bumpHp}
             onApplyDamage={applyDamageTo}
             onToggleMort={toggleMort}
@@ -290,7 +294,7 @@ export default function IllireaCombatView({ combat, monstersById = {}, tablesByI
   )
 }
 
-function ParticipantCard({ p, monstersById = {}, onBumpHp, onApplyDamage, onToggleMort, onLog, onRefresh, onSetStatuses }) {
+function ParticipantCard({ p, monstersById = {}, dotPresets = [], onSavePreset, onBumpHp, onApplyDamage, onToggleMort, onLog, onRefresh, onSetStatuses }) {
   const [atkOpen, setAtkOpen] = useState(false)
   const [result, setResult] = useState(null)
   const [statusOpen, setStatusOpen] = useState(false)
@@ -383,7 +387,7 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onApplyDamage, onTogg
           <div className="flex flex-wrap gap-1.5 mb-1.5">
             {statuts.map((s) => (
               <span key={s.id} className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-400/30 text-purple-200">
-                {s.nom} {s.degats}/t{s.duree === null ? ' ∞' : ` (${s.duree}t)`}
+                {s.nom} {s.degats}/t{s.duree === null ? ' ∞' : ` (${s.duree}t)`}{s.critique ? ' 💥' : ''}{s.cumulable ? ' ＋' : ''}
                 <button onClick={() => removeStatus(s)} className="hover:text-white"><X size={11} /></button>
               </span>
             ))}
@@ -391,12 +395,26 @@ function ParticipantCard({ p, monstersById = {}, onBumpHp, onApplyDamage, onTogg
         )}
         {statusOpen ? (
           <StatusForm
+            libraryPresets={dotPresets}
+            onSavePreset={onSavePreset}
+            showCrit={false}
             onCancel={() => setStatusOpen(false)}
-            onAdd={({ nom, degats, duree }) => {
+            onAdd={({ nom, degats, duree, critique, cumulable, savePreset }) => {
+              const existing = statuts.find((s) => s.nom.toLowerCase() === nom.toLowerCase())
+              if (existing && !cumulable) {
+                onLog([`${p.nom} est déjà ${nom.toLowerCase()} — statut non cumulable, effet inchangé.`])
+                setStatusOpen(false)
+                return
+              }
+              if (savePreset && onSavePreset) onSavePreset(savePreset)
+              const stack = existing ? ` (cumul ×${statuts.filter((s) => s.nom.toLowerCase() === nom.toLowerCase()).length + 1})` : ''
               onSetStatuses(
                 p,
-                [...statuts, { id: newIllireaId(), nom, degats, duree }],
-                [`${p.nom} est ${nom.toLowerCase()}${nom.toLowerCase().endsWith('e') ? 'e' : ''} (${degats}/tour${duree ? `, ${duree} tour${duree > 1 ? 's' : ''}` : ', jusqu’à la fin'}).`]
+                [...statuts, { id: newIllireaId(), nom, degats, duree, critique, cumulable }],
+                [
+                  `${p.nom} est ${nom.toLowerCase()}${nom.toLowerCase().endsWith('e') ? 'e' : ''} (${degats}/tour${duree ? `, ${duree} tour${duree > 1 ? 's' : ''}` : ', jusqu’à la fin'}${critique ? ', dé explosif' : ''})${stack}.`,
+                  ...(savePreset ? [`Statut « ${nom} » enregistré en bibliothèque.`] : [])
+                ]
               )
               setStatusOpen(false)
             }}

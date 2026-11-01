@@ -1,7 +1,7 @@
 // Mojo System — Rencontres prédéfinies + suivi de combat (Teotl)
 import { newId, normalizeTeotlEnemy } from './teotl.js'
 import { normalizeIllireaMonster } from './illirea.js'
-import { rollDiceExpression } from './dice.js'
+import { rollDiceExpression, rollExploding } from './dice.js'
 import { rollLootTable } from './loot.js'
 
 export const STATUT_PRESETS = [
@@ -75,6 +75,41 @@ export function createParticipantFromEnemy(enemy) {
   }
 }
 
+// Numérote les participants partageant le même nom : 2× Gobelin -> « Gobelin #1 », « Gobelin #2 ».
+// Appelé à la création du combat et à chaque ajout ; un nom déjà suivi de « #n » est re-basé sur son radical.
+export function renumberDuplicates(participants = []) {
+  const base = (nom) => String(nom || '').replace(/ #\d+$/, '')
+  const counts = new Map()
+  participants.forEach((p) => counts.set(base(p.nom), (counts.get(base(p.nom)) || 0) + 1))
+  const seen = new Map()
+  return participants.map((p) => {
+    const b = base(p.nom)
+    if (counts.get(b) <= 1) return p.nom === b ? p : { ...p, nom: b }
+    const n = (seen.get(b) || 0) + 1
+    seen.set(b, n)
+    return { ...p, nom: `${b} #${n}` }
+  })
+}
+
+// ── Bibliothèque de statuts (dégâts sur la durée) ────────
+export function createDotPreset({ nom, degats, duree, critique, cumulable }) {
+  const now = new Date().toISOString()
+  return {
+    id: newId(),
+    nom: String(nom || 'Statut').trim(),
+    degats: String(degats || '1').trim(),
+    duree: duree === null || duree === undefined || duree === '' ? null : Math.max(1, Number(duree) || 1),
+    critique: !!critique, // les dés du DoT sont lancés en dés explosifs
+    cumulable: !!cumulable, // plusieurs instances indépendantes autorisées sur la même cible
+    createdAt: now
+  }
+}
+
+export function normalizeDotPreset(raw) {
+  const base = createDotPreset(raw || {})
+  return { ...base, ...(raw?.id ? { id: raw.id } : {}) }
+}
+
 function makeCombat(nom, participants, missing = 0, encounterId = null) {
   const now = new Date().toISOString()
   return {
@@ -83,7 +118,7 @@ function makeCombat(nom, participants, missing = 0, encounterId = null) {
     encounterId,
     round: 1,
     statut: 'encours', // encours | termine
-    participants,
+    participants: renumberDuplicates(participants),
     log: [
       {
         id: newId(),
@@ -138,7 +173,7 @@ export function normalizeCombat(raw) {
           degatsDernier: p?.degatsDernier || null,
           degatsRound: Math.max(0, Number(p?.degatsRound) || 0),
           statuts: Array.isArray(p?.statuts)
-            ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1) }))
+            ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1), critique: !!s?.critique, cumulable: !!s?.cumulable }))
             : [],
           snapshot: {
             armure: p?.snapshot?.armure || '',
@@ -158,7 +193,9 @@ export function normalizeCombat(raw) {
 
 // Applique les dégâts sur la durée + décrémente les durées. Ne touche pas aux morts.
 // -> { participants, entries } (entries = lignes de log, sans id/round)
-export function applyRoundEffects(participants = [], rng = Math.random) {
+export function applyRoundEffects(participants = [], rng = Math.random, dotMode = 'plain') {
+  // dotMode : 'teotl' = les DoT critiques explosent mais n'échouent jamais (1 = 1) ;
+  //           'plain' (Illirea) = jet simple, les dégâts valent le dé, sans modification.
   const entries = []
   const next = participants.map((p) => {
     if (p.mort) return p
@@ -166,7 +203,9 @@ export function applyRoundEffects(participants = [], rng = Math.random) {
     const details = []
     const kept = []
     ;(p.statuts || []).forEach((s) => {
-      const roll = rollDiceExpression(s.degats, rng)
+      const roll = dotMode === 'teotl' && s.critique
+        ? rollExploding(s.degats, rng, { noFail: true })
+        : rollDiceExpression(s.degats, rng)
       const dmg = roll ? Math.max(0, roll.total) : 0
       dot += dmg
       details.push(`${s.nom} ${roll ? roll.detail.split('→')[1].trim() : '(illisible, 0)'}`)
@@ -254,7 +293,7 @@ export function normalizeIllireaCombat(raw) {
             degatsDernier: p?.degatsDernier || null,
             degatsRound: Math.max(0, Number(p?.degatsRound) || 0),
             statuts: Array.isArray(p?.statuts)
-              ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1) }))
+              ? p.statuts.map((s) => ({ id: s?.id || newId(), nom: s?.nom || 'Statut', degats: String(s?.degats ?? '1'), duree: s?.duree === null ? null : Math.max(1, Number(s?.duree) || 1), critique: !!s?.critique, cumulable: !!s?.cumulable }))
               : [],
             defense: {
               bas: Number(p?.defense?.bas ?? 3),
